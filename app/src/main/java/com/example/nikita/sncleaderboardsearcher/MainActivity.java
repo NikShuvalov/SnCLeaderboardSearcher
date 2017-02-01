@@ -1,10 +1,11 @@
 package com.example.nikita.sncleaderboardsearcher;
 
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -15,7 +16,6 @@ import android.os.AsyncTask;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
@@ -45,23 +45,28 @@ break.
 
 public class MainActivity extends AppCompatActivity {
     String username;
-    ArrayList<String> entries= new ArrayList<>();
-    TextView resultView;
+    ArrayList<String> mEntries= new ArrayList<>();
     EditText editText;
-    DownloadTask downloadTask;
+    DownloadTask mDownloadTask;
     String result;
     Boolean searching=false;
     String selfUser;
     Button selfButton;
-    String relevantHTML = "";
+    String relevantHTML;
     Boolean found;
     ArrayList<String> tempArray = new ArrayList<>();
+    private RecyclerView mResultsRecycler;
+    private ResultsRecyclerAdapter mAdapter;
+    public ResultsManager mResultsManager;
+    public static final String SELF_USER_NAME_PREF = "Self user";
+    public static final String RESULT_AMOUNT_PREF = "Result amount";
 
-    public class DownloadTask extends AsyncTask<String, Void, String>{
+
+    public class DownloadTask extends AsyncTask<String, Void, String> {
 
         @Override
         protected String doInBackground(String... urls) {
-            String result="";
+            String result = "";
             URL url;
             try {
                 url = new URL(urls[0]);
@@ -69,61 +74,75 @@ public class MainActivity extends AppCompatActivity {
                 InputStream inputStream = urlConnection.getInputStream();
                 InputStreamReader reader = new InputStreamReader(inputStream);
                 BufferedReader bufferedReader = new BufferedReader(reader);
-                String s = "";
-                while ((s=bufferedReader.readLine())!=null){
-                    result+=s;
+                String s;
+                while ((s = bufferedReader.readLine()) != null) {
+                    result += s;
                 }
                 return result;
-            } catch (MalformedURLException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
+            } catch (MalformedURLException e1) {
+                e1.printStackTrace();
+            } catch (IOException e1) {
+                e1.printStackTrace();
             }
+
             return null;
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            Pattern p = Pattern.compile("class=\"leaderboard_table\">(.*?)</table>");
+            Matcher m = p.matcher(result);
+            while (m.find()) {
+                relevantHTML = m.group(1);
+            }
+
+            p = Pattern.compile("<tr>(.*?)</tr>");
+            m = p.matcher(relevantHTML);
+            while (m.find()) {
+                mEntries.add(m.group(1));
+            }
         }
     }
 
     public void searchUser(View view) {
+//        getCurrentData(view);
         InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
         if (!searching) {
             searching=true;
             found=false;
-            Button b = (Button)view;
-            int id= b.getId();
             username = editText.getText().toString();
-            if (id== selfButton.getId()){
+            if(view.getId() == R.id.selfButton){
                 final SharedPreferences sharedPreference = this.getSharedPreferences
-                        ("com.example.nikita.sncleaderboardsearcher",MODE_PRIVATE);
-                selfUser= sharedPreference.getString("selfUser", "");
+                        (getResources().getString(R.string.app_name),MODE_PRIVATE);
+                selfUser= sharedPreference.getString(SELF_USER_NAME_PREF, "");
                 if (selfUser.equals("")){
-                    sharedPreference.edit().putString("selfUser",editText.getText().toString()).apply();
+                    sharedPreference.edit().putString(SELF_USER_NAME_PREF,editText.getText().toString()).apply();
                     selfButton.setText("Search for self");
                 }else{
                     username=selfUser;
                 }
             }
+            mResultsManager.setSearchName(username);
             Pattern p = Pattern.compile(">(.*?)</td>");
-
-            for (int i = 0; i < entries.size(); i++) {
+            mResultsManager.setFoundPosition(-1);
+            ResultsManager.getInstance().clearResults();
+            for (int i = 0; i < mEntries.size(); i++) {
                 if (i != 0) {
-                    String t = entries.get(i);
+                    Log.d("Add things", "searchUser: ");
+                    String t = mEntries.get(i);
                     tempArray.clear();
                     Matcher m = p.matcher(t);
                     while (m.find()) {
                         tempArray.add(m.group(1));
                     }
+                    mResultsManager.addResult(new Result(tempArray));
+                    mAdapter.notifyItemInserted(mResultsManager.getResultsList().size()-1);
                     String user1 = tempArray.get(1).toUpperCase();
                     String user2 = username.toUpperCase();
                     if (user1.equals(user2)) {
-                        resultView.setText("Position:"+tempArray.get(0)+
-                                "\nName:"+tempArray.get(1)+
-                                "\nPoints:"+tempArray.get(2)+
-                                "\nCurrent Cash:"+tempArray.get(3)+
-                                "\nProjected Cash:"+tempArray.get(4));
-                        searching=false;
                         found= true;
-                        break;
+                        mResultsManager.setFoundPosition(i-1);
                     }
                 }
             }
@@ -135,6 +154,9 @@ public class MainActivity extends AppCompatActivity {
         }else{
             Toast.makeText(getApplicationContext(),"Still searching",Toast.LENGTH_SHORT).show();
         }
+        if(mResultsManager.getFoundPosition()!=-1){
+            mResultsRecycler.smoothScrollToPosition(mResultsManager.getFoundPosition());
+        }
     }
 
     @Override
@@ -144,40 +166,44 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        downloadTask = new DownloadTask();
+        mResultsManager = ResultsManager.getInstance();
 
-        resultView=(TextView) findViewById(R.id.resultView);
+        mDownloadTask = new DownloadTask();
+
         editText =(EditText) findViewById(R.id.editText);
         selfButton= (Button)findViewById(R.id.selfButton);
+        if(!getSharedPreferences(getResources().getString(R.string.app_name),MODE_PRIVATE).getString(SELF_USER_NAME_PREF,"").equals("")){
+            selfButton.setText("Search for Self");
+        }else{
+            selfButton.setText("Set Self Username");
+        }
 
+        mResultsRecycler =(RecyclerView) findViewById(R.id.results_recyclerview);
+        LinearLayoutManager linearLayoutManager = new LinearLayoutManager(this, LinearLayoutManager.VERTICAL,false);
+        mAdapter = new ResultsRecyclerAdapter(mResultsManager.getResultsList());
 
+        mResultsRecycler.setLayoutManager(linearLayoutManager);
+        mResultsRecycler.setAdapter(mAdapter);
+
+        int preferredResult = getSharedPreferences(getResources().getString(R.string.app_name), MODE_PRIVATE).getInt(RESULT_AMOUNT_PREF,200);
         try {
-            result = downloadTask.execute("http://sitncrush.wpnetwork.eu/Race/SnC?results=200&site=0").get();
+            result = mDownloadTask.execute(String.format("http://sitncrush.wpnetwork.eu/Race/SnC?results=200&site=0",preferredResult)).get();
         } catch (InterruptedException e) {
             e.printStackTrace();
         } catch (ExecutionException e) {
             e.printStackTrace();
         }
-        Pattern p = Pattern.compile("class=\"leaderboard_table\">(.*?)</table>");
-        Matcher m = p.matcher(result);
-        while (m.find()) {
-            relevantHTML = m.group(1);
-        }
-
-        p = Pattern.compile("<tr>(.*?)</tr>");
-        m = p.matcher(relevantHTML);
-        while (m.find()) {
-            entries.add(m.group(1));
-        }
-
-        final SharedPreferences sharedPreference = this.getSharedPreferences
-                ("com.example.nikita.sncleaderboardsearcher",MODE_PRIVATE);
-        selfUser= sharedPreference.getString("selfUser", "");
-        if (selfUser.equals("")){
-            selfButton.setText("Set Self Username");
-        }else{
-            selfButton.setText("Search for self");
-        }
+//        Pattern p = Pattern.compile("class=\"leaderboard_table\">(.*?)</table>");
+//        Matcher m = p.matcher(result);
+//        while (m.find()) {
+//            relevantHTML = m.group(1);
+//        }
+//
+//        p = Pattern.compile("<tr>(.*?)</tr>");
+//        m = p.matcher(relevantHTML);
+//        while (m.find()) {
+//            mEntries.add(m.group(1));
+//        }
     }
 
 
@@ -199,12 +225,36 @@ public class MainActivity extends AppCompatActivity {
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
             final SharedPreferences sharedPreference = this.getSharedPreferences
-                    ("com.example.nikita.sncleaderboardsearcher",MODE_PRIVATE);
+                    (getResources().getString(R.string.app_name),MODE_PRIVATE);
             selfUser="";
-            sharedPreference.edit().remove("selfUser").commit();
+            sharedPreference.edit().remove(SELF_USER_NAME_PREF).commit();
             selfButton.setText("Set Self Username");
         }
 
         return super.onOptionsItemSelected(item);
     }
+
+    public void getCurrentData(View view){
+        int preferredResult = getSharedPreferences(getResources().getString(R.string.app_name), MODE_PRIVATE).getInt(RESULT_AMOUNT_PREF,200);
+//        try {
+//            result = mDownloadTask.execute(String.format("http://sitncrush.wpnetwork.eu/Race/SnC?results=%s&site=0",preferredResult)).get();
+//        }  catch (Exception e) {
+//            e.printStackTrace();
+//        }
+//        Pattern p = Pattern.compile("class=\"leaderboard_table\">(.*?)</table>");
+//        Matcher m = p.matcher(result);
+//        while (m.find()) {
+//            relevantHTML = m.group(1);
+//        }
+//
+//        p = Pattern.compile("<tr>(.*?)</tr>");
+//        m = p.matcher(relevantHTML);
+//        while (m.find()) {
+//            mEntries.add(m.group(1));
+//        }
+    }
+
+
+
+
 }

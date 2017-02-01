@@ -16,10 +16,9 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:id="@+id/editText"
-        android:layout_below="@+id/textView"
+        android:hint="Enter Username"
         android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_marginTop="55dp" />
+        android:layout_alignParentStart="true"/>
 
     <Button
         android:layout_width="wrap_content"
@@ -27,39 +26,21 @@
         android:text="Search for name"
         android:id="@+id/searchButton"
         android:layout_below="@+id/editText"
-        android:layout_centerHorizontal="true"
-        android:onClick="searchUser"
-        android:tag="0"/>
+        android:onClick="searchUser"/>
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Set self username"
+        android:layout_below="@id/editText"
+        android:layout_toRightOf="@id/searchButton"
         android:id="@+id/selfButton"
-        android:layout_centerVertical="true"
-        android:layout_alignLeft="@+id/searchButton"
-        android:layout_alignStart="@+id/searchButton"
-        android:onClick="searchUser"
-        android:tag="1"/>
+        android:onClick="searchUser"/>
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Enter username below"
-        android:id="@+id/textView"
-        android:textSize="20dp"
-        android:layout_alignParentTop="true"
-        android:layout_alignRight="@+id/searchButton"
-        android:layout_alignEnd="@+id/searchButton" />
-
-    <TextView
+    <android.support.v7.widget.RecyclerView
+        android:id="@+id/results_recyclerview"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:id="@+id/resultView"
-        android:textSize="20dp"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_below="@+id/selfButton" />
+        android:layout_height="match_parent"
+        android:layout_below="@id/searchButton"/>
+
 
 
 </RelativeLayout>
